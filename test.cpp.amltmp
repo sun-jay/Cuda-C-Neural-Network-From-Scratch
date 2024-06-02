@@ -1,0 +1,57 @@
+#include <iostream>
+#include <cuda_runtime.h>
+#include <string>
+
+using namespace std;
+
+// Kernel function to generate Fibonacci sequence
+__global__
+void generateFib(int n, int *y)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x + 2;
+    if (i < n) {
+        atomicAdd(&y[i], y[i-1] + y[i-2] - 1);
+    }
+}
+
+int main(void)
+{
+    int N = 1 << 20; // Size of the array
+    int *x, *y;
+
+    // Allocate Unified Memory – accessible from CPU or GPU
+    cudaMallocManaged(&x, N * sizeof(int));
+    cudaMallocManaged(&y, N * sizeof(int));
+    
+    // Initialize x and y arrays on the host
+    for (int i = 0; i < N; i++) {
+        x[i] = 2;
+        y[i] = 1;
+    }
+
+    // Set the first two elements for Fibonacci initialization
+    y[0] = 0;
+    y[1] = 1;
+
+    // Kernel launch parameters
+    int blockSize = 256;
+    int numBlocks = (N + blockSize - 1) / blockSize;
+
+    std::cout << "NumBlocks: " << numBlocks << std::endl;
+
+    // Run kernel on the GPU
+    generateFib<<<numBlocks, blockSize>>>(N, y);
+
+    // Wait for GPU to finish before accessing on host
+    cudaDeviceSynchronize();
+
+    // Output the first 10 Fibonacci numbers
+    for (int i = 0; i < 10; i++)
+        cout << to_string(y[i]) << ", " << endl;
+
+    // Free memory
+    cudaFree(x);
+    cudaFree(y);
+    
+    return 0;
+}
