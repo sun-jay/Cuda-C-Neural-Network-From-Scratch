@@ -44,8 +44,8 @@ int main() {
     CHECK_CUDNN(cudnnCreate(&global_cudnn_handle));
 
     const std::string filename = "data.txt";
-    const int num_samples = 35700*2;
-    const int num_features = 784*2;
+    const int num_samples = 35700;
+    const int num_features = 784;
 
     // const int num_samples = 13;
     // const int num_features = 13;
@@ -56,19 +56,12 @@ int main() {
     Matrix inputs(num_samples, num_features);
     Matrix y_true(1, num_samples);
 
-    inputs.init_random();
-    y_true.init_int(1);
 
-    // readData(filename, inputs.data, y_true.data, num_samples, num_features);
-
-
+    // inputs.init_random();
+    // y_true.init_int(1);
+    readData(filename, inputs.data, y_true.data, num_samples, num_features);
 
 
-
-
-    
-    inputs.init_random();
-    y_true.init_int(1);
     
     
     // for (int i = 35700-10; i< 35700;i++ ){
@@ -76,24 +69,25 @@ int main() {
     // }
     // return 0;
 
-    Layer_Dense layer1(num_samples, num_features, 64);
-    Activation_Relu act1(num_samples, 64);
+    int layer1_out = 64;
 
-    Layer_Dense layer2(num_samples, 64, 10);
+    Layer_Dense layer1(num_samples, num_features, layer1_out);
+    Activation_Relu act1(num_samples, layer1_out);
+
+    Layer_Dense layer2(num_samples, layer1_out, 10);
     // Activation_Relu act2(num_samples, 10);
 
     Softmax_CE_Loss smceLoss(num_samples, 10);
-    Optimizer_Adam optimizer(0.001, 5e-4);
+    Optimizer_Adam optimizer(0.05, 5e-9);
 
     float total_time = 0;
-    
+     
+    for(int epoch = 0;  epoch <100; epoch ++){
 
-    for(int epoch = 0;  epoch <2; epoch ++){
+        {Timer timer(total_time);
         
-        {
-        StdTimer("fwd bkwd", total_time, epoch, 1); //timing block
 
-        std::this_thread::sleep_for(std::chrono::seconds(1));
+        // std::this_thread::sleep_for(std::chrono::seconds(1));
     
         layer1.forward(inputs);
         act1.forward(layer1.output);
@@ -116,23 +110,27 @@ int main() {
         optimizer.update_params(layer1);
         optimizer.update_params(layer2);
         optimizer.post_update_params();
-        }  //end timing block
+
+        }
 
     if (epoch%10 == 0)
     cout<<"epoch: " << epoch << " loss: " << smceLoss.calc_loss_cpu(smceLoss.output, y_true) <<endl;
     cout<<"epoch: " << epoch << " accuracy: " << smceLoss.calc_acc_cpu(smceLoss.output, y_true) <<endl;
     }
 
+    // timer.stop();
+
+
     cout << "total_gpu_time: " << total_time <<endl;
     
 
     
-
-
     
     CHECK_CUBLAS(cublasDestroy(global_cublas_handle));
     CHECK_CUDNN(cudnnDestroy(global_cudnn_handle));
     return 0;
+
+
 }
 
 

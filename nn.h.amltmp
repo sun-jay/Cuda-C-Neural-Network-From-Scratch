@@ -194,36 +194,59 @@ private:
     int modNum;
 };
 
-class StdTimer {
+class Timer
+{
 public:
-    StdTimer(const std::string& name, float& total_time_ref, int e = -1, int mN = 10) 
-        : name_(name), total_time_ref_(&total_time_ref), epoch(e), modNum(mN) {
-        start_ = std::chrono::high_resolution_clock::now();
+    Timer(float& total_time_ref) 
+        : total_time_ref_(&total_time_ref) {
+        start();
     }
 
-    StdTimer(const std::string& name) 
-        : name_(name), total_time_ref_(nullptr), epoch(-1), modNum(10) {
-        start_ = std::chrono::high_resolution_clock::now();
+    Timer() 
+        : total_time_ref_(nullptr) {
+        start();
     }
 
-    ~StdTimer() {
-        auto stop = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<float> duration = stop - start_;
-        float seconds = duration.count();
-        if (epoch != -1 && epoch % modNum == 0) {
-            std::cout << name_ << " Epoch: " << epoch << " - Time elapsed: " << seconds << " seconds" << std::endl;
-        }
+    ~Timer() {
+        stop();
+        double seconds = elapsedSeconds();
         if (total_time_ref_) {
             *total_time_ref_ += seconds;
         }
+        // std::cout << "Time elapsed: " << seconds << " seconds" << std::endl;
+    }
+
+    void start() {
+        m_StartTime = std::chrono::system_clock::now();
+        m_bRunning = true;
+    }
+    
+    void stop() {
+        m_EndTime = std::chrono::system_clock::now();
+        m_bRunning = false;
+    }
+    
+    double elapsedMilliseconds() const {
+        std::chrono::time_point<std::chrono::system_clock> endTime;
+        
+        if(m_bRunning) {
+            endTime = std::chrono::system_clock::now();
+        } else {
+            endTime = m_EndTime;
+        }
+        
+        return std::chrono::duration_cast<std::chrono::milliseconds>(endTime - m_StartTime).count();
+    }
+    
+    double elapsedSeconds() const {
+        return elapsedMilliseconds() / 1000.0;
     }
 
 private:
-    std::string name_;
-    std::chrono::time_point<std::chrono::high_resolution_clock> start_;
+    std::chrono::time_point<std::chrono::system_clock> m_StartTime;
+    std::chrono::time_point<std::chrono::system_clock> m_EndTime;
+    bool m_bRunning = false;
     float* total_time_ref_;
-    int epoch;
-    int modNum;
 };
 
 
