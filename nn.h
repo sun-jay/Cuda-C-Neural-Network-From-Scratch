@@ -53,6 +53,9 @@ void print(string p) {
     cout << p << endl;
 }
 
+// layer_dense biases addition kernel
+// static __global void layer_dense_forward()
+
 // relu forward kernel
 static __global__ void relu_forward(float *inputs, float *outputs, int size){
   int global_tid = blockIdx.x * blockDim.x + threadIdx.x;
@@ -142,40 +145,7 @@ __global__ void update_weights_kernel(float* weights, float* weight_momentums, f
 
     }
 }
-// __global__ void update_biases_kernel(float* biases, float* bias_momentums, float* bias_cache,
-//         float* dbiases, int totalLen, float beta_1, float beta_2,
-//         float current_learning_rate, float epsilon, int iterations){
 
-//     int global_tid = blockIdx.x * blockDim.x + threadIdx.x;
-//     if (global_tid < totalLen) {
-
-//         bias_momentums[global_tid] = beta_1 * biases_momentums[global_tid] + (1 - beta_1) * dbiases[global_tid];
-
-//         // write this out in comments for readability but make code succint for efficiency -- we will need this definition to calc biases adjustment
-
-//         // bias_momentums_corrected[global_tid] = bias_momentums[global_tid] / (1 - beta_1 ** (iterations + 1))
-//         // bias_cache_corrected[global_tid] = bias_cache[global_tid] / (1 - beta_2 ** (iterations + 1))
-
-//         bias_cache[global_tid] = beta_2 * bias_cache[global_tid] + (1 - beta_2) * pow(dbiases[global_tid], 2);
-
-
-//         // layer.biases += -self.current_learning_rate * \
-//         //             bias_momentums_corrected / \
-//         //             (np.sqrt(bias_cache_corrected) +
-//         //                 self.epsilon)
-//         float del = -current_learning_rate
-//         * (bias_momentums[global_tid] / (1 -   pow (beta_1,(iterations + 1))     ))
-//         / (pow(      bias_cache[global_tid] / (1 - pow(beta_2, (iterations + 1)))   ,0.5    ) + epsilon);
-
-//         // printf("tid: %d, delta: %f\n", global_tid, del);
-
-//         biases[global_tid] += -current_learning_rate
-//         * (bias_momentums[global_tid] / (1 -   pow (beta_1,(iterations + 1))     ))
-//         / (pow(      bias_cache[global_tid] / (1 - pow(beta_2, (iterations + 1))      ),0.5    ) + epsilon);
-
-
-//     }
-// }
 
 class CudaTimer {
 public:
@@ -419,11 +389,13 @@ class Layer_Dense {
     Matrix bias_momentums;
     Matrix bias_cache;
 
+    bool use_bias;
+
 
 
 
     // Constructor
-    Layer_Dense(int batch_size, int n_inputs, int n_neurons):
+    Layer_Dense(int batch_size, int n_inputs, int n_neurons, bool use_bias = false):
         weights(n_inputs, n_neurons),
         biases(1, n_neurons),
         output(batch_size, n_neurons),
@@ -436,7 +408,8 @@ class Layer_Dense {
         weight_momentums(n_inputs, n_neurons),
         weight_cache(n_inputs, n_neurons),
         bias_momentums(1, n_neurons),
-        bias_cache(1, n_neurons)
+        bias_cache(1, n_neurons),
+        use_bias(false)
 
         {
 
@@ -452,13 +425,15 @@ class Layer_Dense {
 
         Matrix::multiply(input, weights, output, false, false);
 
+        if(use_bias){
+
         // Add biases -- right now, this isn't accelerated by the GPU. We can add this in later
         for(int col = 0; col<output.cols; col++){
             for(int row = 0; row<output.rows; row++){
                 output(row,col) += biases(0,col);
             }
         }
-        
+        }
     }
 
       // Backward pass
@@ -468,16 +443,28 @@ class Layer_Dense {
         // dvalues.printDims("dvalues");
         // dweights.printDims("dweights");
         
-        // potential optimization to dispatch these kernels at the same time, same with the biases kernel when we implement it
+        // potential optimization to dispatch these kernels at the same time, same with the biases kernel when we implement it -- launch them all at once, the sync after all 3
         Matrix::multiply( *inputs, dvalues, dweights, true, false);
         Matrix::multiply( dvalues, weights, dinputs, false, true);
         
+        if(use_bias){
         // Add biases -- right now, this isn't accelerated by the GPU. We can add this in later
         for(int col = 0; col<output.cols; col++){
             for(int row = 0; row<output.rows; row++){
                 dbiases(0,col) += dvalues(row,col);
             }
         }
+        }
+
+        // were going to need a thread for each element in outputs
+
+        // int totalLen = output.cols*output.rows;
+
+        // int blockSize = 1024;
+
+        // int numBlocks = (totalLen + blockSize - 1)/blockSize;
+
+        // layer_dense_forward <<< numBlocks, blockSize >>> (output.data, dbiases.data, dvalues.data, output.rows, output.cols);
 
     }
 
@@ -698,12 +685,15 @@ public:
         cudaDeviceSynchronize();
         CHECK_LAST_CUDA_ERROR();
 
-        update_weights_kernel<<<blocks_per_grid_biases, threads_per_block>>>(layer.biases.data, layer.bias_momentums.data, layer.bias_cache.data,
-        layer.dbiases.data, biases_size, beta_1, beta_2,
-        current_learning_rate, epsilon, iterations);
+        if (layer.use_bias){
+            // repurpose update_weights_kernel for biases because they are the same elementwise operations
+            update_weights_kernel<<<blocks_per_grid_biases, threads_per_block>>>(layer.biases.data, layer.bias_momentums.data, layer.bias_cache.data,
+            layer.dbiases.data, biases_size, beta_1, beta_2,
+            current_learning_rate, epsilon, iterations);
 
-        cudaDeviceSynchronize();
-        CHECK_LAST_CUDA_ERROR();
+            cudaDeviceSynchronize();
+            CHECK_LAST_CUDA_ERROR();
+        }
 
     }
 

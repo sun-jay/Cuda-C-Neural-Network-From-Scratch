@@ -115,9 +115,8 @@ int main() {
 
         }
 
-    if (epoch%100 == 1)
-    cout<<"epoch: " << epoch << " loss: " << smceLoss.calc_loss_cpu(smceLoss.output, y_true) <<endl;
-    cout<<"epoch: " << epoch << " accuracy: " << smceLoss.calc_acc_cpu(smceLoss.output, y_true) <<endl;
+    if ((epoch+1)%50 == 0 || epoch == 0)
+    cout<<"epoch: " << epoch << " loss: " << smceLoss.calc_loss_cpu(smceLoss.output, y_true) << " accuracy: " << smceLoss.calc_acc_cpu(smceLoss.output, y_true) <<endl;
     }
 
     cout << "total_training_gpu_time: " << total_time <<endl;
