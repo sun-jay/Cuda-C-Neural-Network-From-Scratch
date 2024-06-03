@@ -83,6 +83,16 @@ int main() {
 
 
     float total_time = 0;
+    float fwd_L1_time = 0;
+    float fwd_RELU_time = 0;
+    float fwd_L2_time = 0;
+    float fwd_smceloss_time = 0;
+
+    float bkwd_smceLoss_time = 0;
+    float bkwd_L2_time = 0;
+    float bkwd_RELU_time = 0;
+    float bkwd_L2_time = 0;
+
      
     for(int epoch = 0;  epoch <100; epoch ++){
 

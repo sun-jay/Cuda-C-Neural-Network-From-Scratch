@@ -190,8 +190,8 @@ private:
 class Timer
 {
 public:
-    Timer(float& total_time_ref) 
-        : total_time_ref_(&total_time_ref) {
+    Timer(float& total_time_ref, string s = "") 
+        : total_time_ref_(&total_time_ref), printStr(p) {
         start();
     }
 
@@ -206,7 +206,8 @@ public:
         if (total_time_ref_) {
             *total_time_ref_ += seconds;
         }
-        // std::cout << "Time elapsed: " << seconds << " seconds" << std::endl;
+        if(print)
+        std::cout << "Time elapsed: " << seconds << " seconds" << std::endl;
     }
 
     void start() {
@@ -240,6 +241,7 @@ private:
     std::chrono::time_point<std::chrono::system_clock> m_EndTime;
     bool m_bRunning = false;
     float* total_time_ref_;
+    bool print;
 };
 
 
@@ -332,7 +334,7 @@ public:
     }
 
     // Matrix multiplication
-    static void multiply(const Matrix& A, const Matrix& B, Matrix& C, bool transpose_A = false, bool transpose_B = false) {
+    static void multiply(const Matrix& A, const Matrix& B, Matrix& C, bool transpose_A = false, bool transpose_B = false, bool autoSync = true) {
 
     if (A.cpu_only || B.cpu_only){
         cout << "CPU ONLY MATRIX!!";
@@ -365,8 +367,8 @@ public:
             &beta,
             C.data,C.cols));
 
-    // **** SUPER IMPORTANT        
-    cudaDeviceSynchronize();
+    // **** SUPER IMPORTANT
+    if (autoSync) cudaDeviceSynchronize();
     CHECK_LAST_CUDA_ERROR();
 
     }
@@ -426,13 +428,12 @@ class Layer_Dense {
         Matrix::multiply(input, weights, output, false, false);
 
         if(use_bias){
-
-        // Add biases -- right now, this isn't accelerated by the GPU. We can add this in later
-        for(int col = 0; col<output.cols; col++){
-            for(int row = 0; row<output.rows; row++){
-                output(row,col) += biases(0,col);
+            // Add biases -- right now, this isn't accelerated by the GPU. We can add this in later
+            for(int col = 0; col<output.cols; col++){
+                for(int row = 0; row<output.rows; row++){
+                    output(row,col) += biases(0,col);
+                }
             }
-        }
         }
     }
 
@@ -444,16 +445,20 @@ class Layer_Dense {
         // dweights.printDims("dweights");
         
         // potential optimization to dispatch these kernels at the same time, same with the biases kernel when we implement it -- launch them all at once, the sync after all 3
-        Matrix::multiply( *inputs, dvalues, dweights, true, false);
-        Matrix::multiply( dvalues, weights, dinputs, false, true);
+        // in these calls, the function doesn't sync automatically
+        // we send both of them out to be scheduled by the GPU, hopefully allowing them to execute in paralell if there is space on the GPU (there shoudl bc the data is so small)
+        Matrix::multiply( *inputs, dvalues, dweights, true, false, false);
+        Matrix::multiply( dvalues, weights, dinputs, false, true, false);
+
+        cudaDeviceSynchronize();
         
         if(use_bias){
-        // Add biases -- right now, this isn't accelerated by the GPU. We can add this in later
-        for(int col = 0; col<output.cols; col++){
-            for(int row = 0; row<output.rows; row++){
-                dbiases(0,col) += dvalues(row,col);
+            // Add biases -- right now, this isn't accelerated by the GPU. We can add this in later
+            for(int col = 0; col<output.cols; col++){
+                for(int row = 0; row<output.rows; row++){
+                    dbiases(0,col) += dvalues(row,col);
+                }
             }
-        }
         }
 
         // were going to need a thread for each element in outputs
