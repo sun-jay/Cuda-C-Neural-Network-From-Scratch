@@ -12,15 +12,22 @@ args = parser.parse_args()
 
 cpp_file = args.cpp_file
 
+# Check if the C++ file exists
+if not os.path.isfile(cpp_file):
+    raise FileNotFoundError(f"The file {cpp_file} does not exist.")
+
 # Extract the base filename without extension
-base_filename = os.path.splitext(cpp_file)[0]
+base_filename = os.path.splitext(os.path.basename(cpp_file))[0]
 
 # Create run_files directory if it doesn't exist
 run_files_dir = 'run_files'
 os.makedirs(run_files_dir, exist_ok=True)
 
-# Copy nn.h into run_files using a command
-copy_command = f"cp nn.h {run_files_dir}"
+# Check if nn.h exists and copy it to run_files
+header_file = 'nn.h'
+if not os.path.isfile(header_file):
+    raise FileNotFoundError(f"The header file {header_file} does not exist.")
+copy_command = f"cp {header_file} {run_files_dir}"
 subprocess.run(copy_command, shell=True, check=True)
 
 # Step 1: Copy and rename the provided C++ file to .cu
@@ -36,7 +43,7 @@ compile_command = f"nvcc {cu_file} -o {cuda_file} -lcublas -lcudnn"
 subprocess.run(compile_command, shell=True, check=True)
 
 # Step 3: Run the compiled CUDA executable
-run_command = f"./{base_filename}_cuda"
+run_command = f"./{cuda_file}"
 if args.profile:
     run_command = f"nvprof {run_command}"
 subprocess.run(run_command, shell=True, check=True)
