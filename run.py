@@ -1,12 +1,16 @@
 import os
 import subprocess
-import sys
+import argparse
 
-if len(sys.argv) != 2:
-    print("Usage: python script.py <cpp_file>")
-    sys.exit(1)
+# Create the parser
+parser = argparse.ArgumentParser(description="Compile and run a CUDA file.")
+parser.add_argument("cpp_file", help="The C++ file to compile and run.")
+parser.add_argument("--profile", action="store_true", help="Run with nvprof.")
 
-cpp_file = sys.argv[1]
+# Parse the arguments
+args = parser.parse_args()
+
+cpp_file = args.cpp_file
 
 # Extract the base filename without extension
 base_filename = os.path.splitext(cpp_file)[0]
@@ -32,5 +36,7 @@ compile_command = f"nvcc {cu_file} -o {cuda_file} -lcublas -lcudnn"
 subprocess.run(compile_command, shell=True, check=True)
 
 # Step 3: Run the compiled CUDA executable
-run_command = f"./{cuda_file}"
+run_command = f"./{base_filename}_cuda"
+if args.profile:
+    run_command = f"nvprof {run_command}"
 subprocess.run(run_command, shell=True, check=True)
