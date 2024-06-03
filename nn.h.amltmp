@@ -190,8 +190,8 @@ private:
 class Timer
 {
 public:
-    Timer(float& total_time_ref, string s = "") 
-        : total_time_ref_(&total_time_ref), printStr(p) {
+    Timer(float& total_time_ref) 
+        : total_time_ref_(&total_time_ref) {
         start();
     }
 
@@ -206,8 +206,7 @@ public:
         if (total_time_ref_) {
             *total_time_ref_ += seconds;
         }
-        if(print)
-        std::cout << "Time elapsed: " << seconds << " seconds" << std::endl;
+        // std::cout << "Time elapsed: " << seconds << " seconds" << std::endl;
     }
 
     void start() {
@@ -241,7 +240,6 @@ private:
     std::chrono::time_point<std::chrono::system_clock> m_EndTime;
     bool m_bRunning = false;
     float* total_time_ref_;
-    bool print;
 };
 
 
@@ -336,22 +334,22 @@ public:
     // Matrix multiplication
     static void multiply(const Matrix& A, const Matrix& B, Matrix& C, bool transpose_A = false, bool transpose_B = false, bool autoSync = true) {
 
-    if (A.cpu_only || B.cpu_only){
-        cout << "CPU ONLY MATRIX!!";
-    }
+    // if (A.cpu_only || B.cpu_only){
+    //     cout << "CPU ONLY MATRIX!!";
+    // }
 
-    int Rows_A = transpose_A ? A.cols : A.rows;
-    int Cols_A = transpose_A ? A.rows : A.cols;
-    int Rows_B = transpose_B ? B.cols : B.rows;
-    int Cols_B = transpose_B ? B.rows : B.cols;
+    // int Rows_A = transpose_A ? A.cols : A.rows;
+    // int Cols_A = transpose_A ? A.rows : A.cols;
+    // int Rows_B = transpose_B ? B.cols : B.rows;
+    // int Cols_B = transpose_B ? B.rows : B.cols;
 
-    if (Cols_A != Rows_B){
-        throw std::invalid_argument("Matrix dimensions do not match for multiplication");
-    }
+    // if (Cols_A != Rows_B){
+    //     throw std::invalid_argument("Matrix dimensions do not match for multiplication");
+    // }
 
-    if (C.rows != Rows_A || C.cols != Cols_B){
-        throw std::invalid_argument("C dimensions are not compatible with A and B");
-    }
+    // if (C.rows != Rows_A || C.cols != Cols_B){
+    //     throw std::invalid_argument("C dimensions are not compatible with A and B");
+    // }
 
     const float alpha = 1.0f;
     const float beta = 0.0f;
@@ -416,6 +414,8 @@ class Layer_Dense {
         {
 
         weights.init_random();
+
+        if (use_bias)
         biases.init_consec();
     }
 

@@ -81,7 +81,6 @@ int main() {
     Softmax_CE_Loss smceLoss(num_samples, 10);
     Optimizer_Adam optimizer(0.4, 2e-7);
 
-
     float total_time = 0;
     float fwd_L1_time = 0;
     float fwd_RELU_time = 0;
@@ -91,45 +90,168 @@ int main() {
     float bkwd_smceLoss_time = 0;
     float bkwd_L2_time = 0;
     float bkwd_RELU_time = 0;
-    float bkwd_L2_time = 0;
+    float bkwd_L1_time = 0;
 
-     
-    for(int epoch = 0;  epoch <100; epoch ++){
+    float optim_time = 0;
 
-        {Timer timer(total_time);
+    // std::chrono::time_point<std::chrono::high_resolution_clock> m_StartTime;
+    // m_StartTime = std::chrono::high_resolution_clock::now();
+
+    // for (int epoch = 0; epoch < 1000; epoch++) {
+
         
+    //         // Timer timer(total_time);
+    //         // Forward pass
+    //         std::chrono::time_point<std::chrono::high_resolution_clock> m_StartTimeI;
+    //         m_StartTimeI = std::chrono::high_resolution_clock::now();
+            
+    //             // Timer timer(fwd_L1_time);
+    //             layer1.forward(inputs);
+            
+            
+    //             // Timer timer(fwd_RELU_time);
+    //             act1.forward(layer1.output);
+            
+            
+    //             // Timer timer(fwd_L2_time);
+    //             layer2.forward(act1.output);
+            
+            
+    //             // Timer timer(fwd_smceloss_time);
+    //             smceLoss.forward(layer2.output);
+            
 
-        // std::this_thread::sleep_for(std::chrono::seconds(1));
-    
-        layer1.forward(inputs);
-        act1.forward(layer1.output);
+    //         // Backward pass
+            
+    //             // Timer timer(bkwd_smceLoss_time);
+    //             smceLoss.backward(smceLoss.output, y_true);
+            
+    //         // act2.backward(smceLoss.dinputs);
+            
+    //             // Timer timer(bkwd_L2_time);
+    //             layer2.backward(smceLoss.dinputs);
+            
+            
+    //             // Timer timer(bkwd_RELU_time);
+    //             act1.backward(layer2.dinputs);
+            
+            
+    //             // Timer timer(bkwd_L1_time);
+    //             layer1.backward(act1.dinputs);
+            
+    //         // Update parameters
+            
+    //             // Timer timer(optim_time);
+    //             optimizer.pre_update_params();
+    //             optimizer.update_params(layer1);
+    //             optimizer.update_params(layer2);
+    //             optimizer.post_update_params();
 
-        layer2.forward(act1.output);
-        // act2.forward(layer2.output);
+    //             std::chrono::time_point<std::chrono::high_resolution_clock> m_EndTimeI;
+    //             m_EndTimeI = std::chrono::high_resolution_clock::now();
 
-        smceLoss.forward(layer2.output); 
+    //             total_time += chrono::duration_cast<std::chrono::milliseconds>(m_EndTimeI - m_StartTimeI).count();
+            
+        
+    // }
 
-        // Backward pass
-        smceLoss.backward(smceLoss.output, y_true);
-        // act2.backward(smceLoss.dinputs);
-        layer2.backward(smceLoss.dinputs); 
+    // std::chrono::time_point<std::chrono::high_resolution_clock> m_EndTime;
+    // m_EndTime = std::chrono::high_resolution_clock::now();
 
-        act1.backward(layer2.dinputs);
-        layer1.backward(act1.dinputs);
+    // cout<< "Total time: " << std::chrono::duration_cast<std::chrono::milliseconds>(m_EndTime - m_StartTime).count()/1000.0<<endl;
+    // cout<< "Total time agregated: " << total_time/1000.0<<endl;
 
-        // Update parameters
-        optimizer.pre_update_params();
-        optimizer.update_params(layer1);
-        optimizer.update_params(layer2);
-        optimizer.post_update_params();
+
+
+
+
+        { Timer timer(total_time);
+
+    for (int epoch = 0; epoch < 1000; epoch++) {
+
+            // Forward pass
+            {
+                Timer timer(fwd_L1_time);
+                layer1.forward(inputs);
+            }
+            {
+                Timer timer(fwd_RELU_time);
+                act1.forward(layer1.output);
+            }
+            {
+                Timer timer(fwd_L2_time);
+                layer2.forward(act1.output);
+            }
+            {
+                Timer timer(fwd_smceloss_time);
+                smceLoss.forward(layer2.output);
+            }
+
+            // Backward pass
+            {
+                Timer timer(bkwd_smceLoss_time);
+                smceLoss.backward(smceLoss.output, y_true);
+            }
+            // act2.backward(smceLoss.dinputs);
+            {
+                Timer timer(bkwd_L2_time);
+                layer2.backward(smceLoss.dinputs);
+            }
+            {
+                Timer timer(bkwd_RELU_time);
+                act1.backward(layer2.dinputs);
+            }
+            {
+                Timer timer(bkwd_L1_time);
+                layer1.backward(act1.dinputs);
+            }
+
+            // Update parameters
+            {
+                Timer timer(optim_time);
+                optimizer.pre_update_params();
+                optimizer.update_params(layer1);
+                optimizer.update_params(layer2);
+                optimizer.post_update_params();
+            }
+
+        // if ((epoch + 1) % 50 == 0 || epoch == 0)
+        //     std::cout << "epoch: " << epoch << " loss: " << smceLoss.calc_loss_cpu(smceLoss.output, y_true) << " accuracy: " << smceLoss.calc_acc_cpu(smceLoss.output, y_true) << std::endl;
+    }
 
         }
 
-    if ((epoch+1)%50 == 0 || epoch == 0)
-    cout<<"epoch: " << epoch << " loss: " << smceLoss.calc_loss_cpu(smceLoss.output, y_true) << " accuracy: " << smceLoss.calc_acc_cpu(smceLoss.output, y_true) <<endl;
-    }
 
-    cout << "total_training_gpu_time: " << total_time <<endl;
+
+
+
+    std::cout << std::fixed << std::setprecision(10);
+
+    // Print the total training GPU time
+    std::cout << "total_training_gpu_time: " << total_time << " seconds" << std::endl;
+
+    // Calculate the total segment time
+    float total_segment_time = fwd_L1_time + fwd_RELU_time + fwd_L2_time + fwd_smceloss_time +
+                               bkwd_smceLoss_time + bkwd_L2_time + bkwd_RELU_time + bkwd_L1_time +
+                               optim_time;
+
+    // Print the total segment time and percentage breakdowns in a nicely formatted chart
+    std::cout << "Total Time Breakdown:" << std::endl;
+    std::cout << "--------------------------------------------------------" << std::endl;
+    std::cout << "| Segment               | Time (seconds) | Percentage  |" << std::endl;
+    std::cout << "--------------------------------------------------------" << std::endl;
+    std::cout << "| Forward Layer 1       | " << std::setw(14) << fwd_L1_time << " | " << std::setw(10) << (fwd_L1_time / total_segment_time) * 100.0 << " % |" << std::endl;
+    std::cout << "| Forward ReLU          | " << std::setw(14) << fwd_RELU_time << " | " << std::setw(10) << (fwd_RELU_time / total_segment_time) * 100.0 << " % |" << std::endl;
+    std::cout << "| Forward Layer 2       | " << std::setw(14) << fwd_L2_time << " | " << std::setw(10) << (fwd_L2_time / total_segment_time) * 100.0 << " % |" << std::endl;
+    std::cout << "| Forward SMCELoss      | " << std::setw(14) << fwd_smceloss_time << " | " << std::setw(10) << (fwd_smceloss_time / total_segment_time) * 100.0 << " % |" << std::endl;
+    std::cout << "| Backward SMCELoss     | " << std::setw(14) << bkwd_smceLoss_time << " | " << std::setw(10) << (bkwd_smceLoss_time / total_segment_time) * 100.0 << " % |" << std::endl;
+    std::cout << "| Backward Layer 2      | " << std::setw(14) << bkwd_L2_time << " | " << std::setw(10) << (bkwd_L2_time / total_segment_time) * 100.0 << " % |" << std::endl;
+    std::cout << "| Backward ReLU         | " << std::setw(14) << bkwd_RELU_time << " | " << std::setw(10) << (bkwd_RELU_time / total_segment_time) * 100.0 << " % |" << std::endl;
+    std::cout << "| Backward Layer 1      | " << std::setw(14) << bkwd_L1_time << " | " << std::setw(10) << (bkwd_L1_time / total_segment_time) * 100.0 << " % |" << std::endl;
+    std::cout << "| Optimization          | " << std::setw(14) << optim_time << " | " << std::setw(10) << (optim_time / total_segment_time) * 100.0 << " % |" << std::endl;
+    std::cout << "--------------------------------------------------------" << std::endl;
+    std::cout << "| Total Segment Time    | " << std::setw(14) << total_segment_time << " | " << std::setw(10) << 100.0 << " % |" << std::endl;
+    std::cout << "--------------------------------------------------------" << std::endl;
 
 
 
@@ -176,53 +298,3 @@ int main() {
 
 }
 
-
-
-
-
-
-
-
-
-
-
-
-    // int batch_size = num_samples;
-    // int n_inputs = num_features;
-    // int n_neurons = 64;
-
-
-    // Matrix inputs(batch_size, n_inputs);
-    // inputs.init_random();
-
-    // Matrix y_true(1, batch_size);
-    // y_true.init_int(1);
-
-    
-    // Layer_Dense layer1(batch_size, n_inputs, n_neurons);
-    // Activation_Relu act1(batch_size, n_neurons);
-    // Softmax_CE_Loss smceLoss(batch_size, n_neurons);
-    // Optimizer_Adam optimizer(0.05, 5e-7);
-    
-
-    // for(int epoch = 0;  epoch <100; epoch ++){
-    
-    // {CudaTimer("fwd bkwd");
-    
-    // layer1.forward(inputs);
-    // act1.forward(layer1.output);
-    // smceLoss.forward(act1.output);
-    
-    // smceLoss.backward(smceLoss.output, y_true);
-    // act1.backward(smceLoss.dinputs);
-    // layer1.backward(act1.dinputs);
-
-    // optimizer.pre_update_params();
-    // optimizer.update_params(layer1);
-    // optimizer.post_update_params();
-
-    // cout<<"epoch: " << epoch << "loss: " << smceLoss.calc_loss_cpu(smceLoss.output, y_true) <<endl;
-
-    // }
-
-    // }
