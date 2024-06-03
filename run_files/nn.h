@@ -132,9 +132,9 @@ __global__ void update_weights_kernel(float* weights, float* weight_momentums, f
         //             weight_momentums_corrected / \
         //             (np.sqrt(weight_cache_corrected) +
         //                 self.epsilon)
-        float del = -current_learning_rate
-        * (weight_momentums[global_tid] / (1 -   pow (beta_1,(iterations + 1))     ))
-        / (pow(      weight_cache[global_tid] / (1 - pow(beta_2, (iterations + 1)))   ,0.5    ) + epsilon);
+        // float del = -current_learning_rate
+        // * (weight_momentums[global_tid] / (1 -   pow (beta_1,(iterations + 1))     ))
+        // / (pow(      weight_cache[global_tid] / (1 - pow(beta_2, (iterations + 1)))   ,0.5    ) + epsilon);
 
         // printf("tid: %d, delta: %f\n", global_tid, del);
 
