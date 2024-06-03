@@ -15,6 +15,10 @@ base_filename = os.path.splitext(cpp_file)[0]
 run_files_dir = 'run_files'
 os.makedirs(run_files_dir, exist_ok=True)
 
+# Copy nn.h into run_files using a command
+copy_command = f"cp nn.h {run_files_dir}"
+subprocess.run(copy_command, shell=True, check=True)
+
 # Step 1: Copy and rename the provided C++ file to .cu
 cu_file = os.path.join(run_files_dir, base_filename + '.cu')
 
