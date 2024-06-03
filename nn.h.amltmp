@@ -71,17 +71,40 @@ static __global__ void relu_backward(float *dvalues, float *dinputs, float *inpu
     }
 }
 
-// Softmax_CE_Loss backward kernel
-__global__ void Softmax_CE_Loss_Kernel(float* output, float* y_true, float* dinputs, int n_inputs, int batch_size) {
+// // Softmax_CE_Loss backward kernel
+// __global__ void Softmax_CE_Loss_Kernel(float* output, float* y_true, float* dinputs, int n_inputs, int batch_size) {
+//     int global_tid = blockIdx.x * blockDim.x + threadIdx.x;
+
+//     // batch size is the len of y_true
+
+//     if (global_tid < batch_size) {
+//         // idx will refer to the element that should have been true
+
+//         int idx = global_tid * n_inputs + static_cast<int>(y_true[global_tid]);
+//         dinputs[idx] = output[idx] - 1.0f;
+//     }
+// }
+
+__global__ void Softmax_CE_Loss_Kernel(float* dvalues, float* y_true, float* dinputs, int n_inputs, int batch_size) {
+
+    // MAKE SURE TO CHANGE LAUNCH CONFIG!!!
     int global_tid = blockIdx.x * blockDim.x + threadIdx.x;
 
-    // batch size is the len of y_true
+    if (global_tid < batch_size * n_inputs) {
+        // Calculate the sample index and class index
+        int class_index = global_tid % n_inputs;
+        int sample_index = global_tid / n_inputs;
+        int true_class_index = static_cast<int>(y_true[sample_index]);
+        
 
-    if (global_tid < batch_size) {
-        // idx will refer to the element that should have been true
+        // make sure to change this logic to get rid of warp divergence
+        // if (class_index == true_class_index) {
+        //     dinputs[global_tid] = (dvalues[global_tid] - 1.0f) / batch_size;
+        // } else {
+        //     dinputs[global_tid] = dvalues[global_tid] / batch_size;
+        // }
+        dinputs[global_tid] = (dvalues[global_tid] - static_cast<int>(class_index == true_class_index) ) / batch_size;
 
-        int idx = global_tid * n_inputs + static_cast<int>(y_true[global_tid]);
-        dinputs[idx] = output[idx] - 1.0f;
     }
 }
 
@@ -444,7 +467,8 @@ class Layer_Dense {
         // inputs->printDims("inpts");
         // dvalues.printDims("dvalues");
         // dweights.printDims("dweights");
-
+        
+        // potential optimization to dispatch these kernels at the same time, same with the biases kernel when we implement it
         Matrix::multiply( *inputs, dvalues, dweights, true, false);
         Matrix::multiply( dvalues, weights, dinputs, false, true);
         
@@ -615,7 +639,7 @@ public:
         // the thread will index output data at global_tid * len_inputs + y_true[global_tid]
         // and subtract 1 from this value
 
-        int totalLen = y_true.cols;  // Batch size
+        int totalLen = dvalues.cols * dvalues.rows;  // Batch size
         int blockSize = 1024;
         int numBlocks = (totalLen + blockSize - 1) / blockSize;
 

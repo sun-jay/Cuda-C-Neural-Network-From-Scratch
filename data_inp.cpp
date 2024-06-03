@@ -57,9 +57,10 @@ int main() {
     Matrix y_true(1, num_samples);
 
 
+    readData(filename, inputs.data, y_true.data, num_samples, num_features);
+    
     // inputs.init_random();
     // y_true.init_int(1);
-    readData(filename, inputs.data, y_true.data, num_samples, num_features);
 
 
     
@@ -78,7 +79,8 @@ int main() {
     // Activation_Relu act2(num_samples, 10);
 
     Softmax_CE_Loss smceLoss(num_samples, 10);
-    Optimizer_Adam optimizer(0.05, 5e-9);
+    Optimizer_Adam optimizer(0.4, 2e-7);
+
 
     float total_time = 0;
      
@@ -113,15 +115,47 @@ int main() {
 
         }
 
-    if (epoch%10 == 0)
+    if (epoch%100 == 1)
     cout<<"epoch: " << epoch << " loss: " << smceLoss.calc_loss_cpu(smceLoss.output, y_true) <<endl;
     cout<<"epoch: " << epoch << " accuracy: " << smceLoss.calc_acc_cpu(smceLoss.output, y_true) <<endl;
     }
 
-    // timer.stop();
+    cout << "total_training_gpu_time: " << total_time <<endl;
 
 
-    cout << "total_gpu_time: " << total_time <<endl;
+
+
+
+
+
+    // BLOCK OF CODE TO TEST ACC
+    const int test_num_samples = 6300;
+    // num_features = 784;
+    
+    // init with the same dims as original batch so it will fit in the mmodel
+    Matrix test_inputs(num_samples, num_features);
+    Matrix test_y_true(1, num_samples);
+
+    readData("test_data.txt", test_inputs.data, test_y_true.data, test_num_samples, num_features);
+
+    // the rest of the data should be filled with zeroes
+
+    layer1.forward(test_inputs);
+    act1.forward(layer1.output);
+
+    layer2.forward(act1.output);
+    smceLoss.forward(layer2.output); 
+
+    // set layer2.smceLoss.rows to 6300. this is false but we will exploit our accuracy fn this way
+    smceLoss.output.rows = 6300;
+    cout<< "TESTset accuracy: " << smceLoss.calc_acc_cpu(smceLoss.output, test_y_true) <<endl;
+
+    // END BLOCK OF CODE TO TEST ACC
+
+    
+
+
+
     
 
     
