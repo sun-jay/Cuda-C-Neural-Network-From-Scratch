@@ -1,4 +1,5 @@
-# combine data1 and data2.txt into data.txt -- so we can commit the data to github
+# run this after cloning to initialize the data.txt file
+# we needed to split it to commit to github
 
 with open('data1.txt', 'r') as file1:
     data1 = file1.readlines()

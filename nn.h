@@ -53,8 +53,10 @@ void print(string p) {
     cout << p << endl;
 }
 
-// layer_dense biases addition kernel
-// static __global void layer_dense_forward()
+// these are all custom kernels that I wrote. Neural networks are incredibly parallelizable
+// only matrix mul and softmax forward require summation (reduction) which is WAY harder to implement efficiently, so i used cuBLAS and cuDNN for those
+// the below kernels, however, are all elementwise operations, which are very easy to parallelize, and they should run pretty much optimally
+// despite my lack of extensive experience with CUDA
 
 // relu forward kernel
 static __global__ void relu_forward(float *inputs, float *outputs, int size){
@@ -74,20 +76,8 @@ static __global__ void relu_backward(float *dvalues, float *dinputs, float *inpu
     }
 }
 
-// // Softmax_CE_Loss backward kernel
-// __global__ void Softmax_CE_Loss_Kernel(float* output, float* y_true, float* dinputs, int n_inputs, int batch_size) {
-//     int global_tid = blockIdx.x * blockDim.x + threadIdx.x;
-
-//     // batch size is the len of y_true
-
-//     if (global_tid < batch_size) {
-//         // idx will refer to the element that should have been true
-
-//         int idx = global_tid * n_inputs + static_cast<int>(y_true[global_tid]);
-//         dinputs[idx] = output[idx] - 1.0f;
-//     }
-// }
-
+// fused softmax and cross-entropy loss backward kernel
+// Softmax_CE_Loss backward kernel
 __global__ void Softmax_CE_Loss_Kernel(float* dvalues, float* y_true, float* dinputs, int n_inputs, int batch_size) {
 
     // MAKE SURE TO CHANGE LAUNCH CONFIG!!!
@@ -98,7 +88,7 @@ __global__ void Softmax_CE_Loss_Kernel(float* dvalues, float* y_true, float* din
         int class_index = global_tid % n_inputs;
         int sample_index = global_tid / n_inputs;
         int true_class_index = static_cast<int>(y_true[sample_index]);
-        
+
 
         // make sure to change this logic to get rid of warp divergence
         // if (class_index == true_class_index) {
@@ -111,6 +101,7 @@ __global__ void Softmax_CE_Loss_Kernel(float* dvalues, float* y_true, float* din
     }
 }
 
+// adam optimizer kernel
 __global__ void update_weights_kernel(float* weights, float* weight_momentums, float* weight_cache,
         float* dweights, int totalLen, float beta_1, float beta_2,
         float current_learning_rate, float epsilon, int iterations){
@@ -147,55 +138,16 @@ __global__ void update_weights_kernel(float* weights, float* weight_momentums, f
 }
 
 
-class CudaTimer {
-public:
-    CudaTimer(const std::string& name, float& total_time_ref, int e = -1, int mN = 10) 
-        : name_(name), total_time_ref_(&total_time_ref), epoch(e), modNum(mN) {
-        cudaEventCreate(&start_);
-        cudaEventCreate(&stop_);
-        cudaEventRecord(start_, 0);
-    }
-
-    CudaTimer(const std::string& name) 
-        : name_(name), total_time_ref_(nullptr), epoch(-1), modNum(10) {
-        cudaEventCreate(&start_);
-        cudaEventCreate(&stop_);
-        cudaEventRecord(start_, 0);
-    }
-
-    ~CudaTimer() {
-        cudaEventRecord(stop_, 0);
-        cudaEventSynchronize(stop_);
-        float milliseconds = 0;
-        cudaEventElapsedTime(&milliseconds, start_, stop_);
-        float seconds = milliseconds / 1000.0;
-        if (epoch != -1 && epoch % modNum == 0) {
-            std::cout << name_ << " Epoch: " << epoch << " - Time elapsed: " << seconds << " seconds" << std::endl;
-        }
-        if (total_time_ref_) {
-            *total_time_ref_ += seconds;
-        }
-        cudaEventDestroy(start_);
-        cudaEventDestroy(stop_);
-    }
-
-private:
-    std::string name_;
-    cudaEvent_t start_, stop_;
-    float* total_time_ref_;
-    int epoch;
-    int modNum;
-};
-
+// Timer class for profiling
 class Timer
 {
 public:
-    Timer(float& total_time_ref) 
+    Timer(float& total_time_ref)
         : total_time_ref_(&total_time_ref) {
         start();
     }
 
-    Timer() 
+    Timer()
         : total_time_ref_(nullptr) {
         start();
     }
@@ -213,24 +165,24 @@ public:
         m_StartTime = std::chrono::system_clock::now();
         m_bRunning = true;
     }
-    
+
     void stop() {
         m_EndTime = std::chrono::system_clock::now();
         m_bRunning = false;
     }
-    
+
     double elapsedMilliseconds() const {
         std::chrono::time_point<std::chrono::system_clock> endTime;
-        
+
         if(m_bRunning) {
             endTime = std::chrono::system_clock::now();
         } else {
             endTime = m_EndTime;
         }
-        
+
         return std::chrono::duration_cast<std::chrono::milliseconds>(endTime - m_StartTime).count();
     }
-    
+
     double elapsedSeconds() const {
         return elapsedMilliseconds() / 1000.0;
     }
@@ -242,7 +194,10 @@ private:
     float* total_time_ref_;
 };
 
-
+// Matrix class -- this saved me so much time and effort
+// Manages: allocation, deallocation, different initialization functions, matrix multiplication,
+// element access, printing (for debugging), and a powerful wrapper for cuBLAS matrix multiplication
+ 
 class Matrix {
 public:
     int rows, cols;
@@ -250,7 +205,7 @@ public:
     bool cpu_only;
 
     // Constructor
-    Matrix(int rows, int cols, bool cpu_only = false) 
+    Matrix(int rows, int cols, bool cpu_only = false)
         : rows(rows), cols(cols), cpu_only(cpu_only) {
         if (cpu_only) {
             data = new float[rows * cols];
@@ -334,6 +289,9 @@ public:
     // Matrix multiplication
     static void multiply(const Matrix& A, const Matrix& B, Matrix& C, bool transpose_A = false, bool transpose_B = false, bool autoSync = true) {
 
+        // these checks are turned off for profiling because they take extra time
+        // they are useful for debugging
+
     // if (A.cpu_only || B.cpu_only){
     //     cout << "CPU ONLY MATRIX!!";
     // }
@@ -354,7 +312,9 @@ public:
     const float alpha = 1.0f;
     const float beta = 0.0f;
 
-    // this will handle row major and carry out the mm like normal
+    // cublasSgemm typically expects column-major matrices
+    // so it reads A and B as A^T and B^T. If we simply transposed both, this would still dump the output into a column major matrix, so we'd get C^T
+    // instread, we simply switch the order of the matrices: B^T * A^T = (A*B)^T = C
     CHECK_CUBLAS(cublasSgemm(global_cublas_handle,
             transpose_B ? CUBLAS_OP_T : CUBLAS_OP_N ,
             transpose_A ? CUBLAS_OP_T : CUBLAS_OP_N ,
@@ -381,7 +341,7 @@ class Layer_Dense {
     Matrix dweights;
     Matrix dbiases;
     Matrix dinputs;
-    Matrix* inputs; 
+    Matrix* inputs;
 
     // for optimizer
     Matrix weight_momentums;
@@ -400,10 +360,10 @@ class Layer_Dense {
         biases(1, n_neurons),
         output(batch_size, n_neurons),
         dweights(n_inputs, n_neurons),
-        dbiases(1, n_neurons), 
-        dinputs(batch_size, n_inputs), 
+        dbiases(1, n_neurons),
+        dinputs(batch_size, n_inputs),
         inputs(nullptr),
-        
+
         // for optimizer
         weight_momentums(n_inputs, n_neurons),
         weight_cache(n_inputs, n_neurons),
@@ -422,9 +382,10 @@ class Layer_Dense {
       // Forward pass
     void forward(Matrix& input) {
 
-        // store a pointer to input matrix
+        // store a pointer to input matrix -- we will need this for the backward pass
         inputs = &input;
-
+        
+        // were storing weight transposed, so we can just multiply the inputs by the weights
         Matrix::multiply(input, weights, output, false, false);
 
         if(use_bias){
@@ -443,7 +404,7 @@ class Layer_Dense {
         // inputs->printDims("inpts");
         // dvalues.printDims("dvalues");
         // dweights.printDims("dweights");
-        
+
         // potential optimization to dispatch these kernels at the same time, same with the biases kernel when we implement it -- launch them all at once, the sync after all 3
         // in these calls, the function doesn't sync automatically
         // we send both of them out to be scheduled by the GPU, hopefully allowing them to execute in paralell if there is space on the GPU (there shoudl bc the data is so small)
@@ -451,7 +412,7 @@ class Layer_Dense {
         Matrix::multiply( dvalues, weights, dinputs, false, true, false);
 
         cudaDeviceSynchronize();
-        
+
         if(use_bias){
             // Add biases -- right now, this isn't accelerated by the GPU. We can add this in later
             for(int col = 0; col<output.cols; col++){
@@ -477,8 +438,8 @@ class Layer_Dense {
 
 class Activation_Relu{
   public:
-  
-    Matrix* inputs; 
+
+    Matrix* inputs;
     Matrix output;
 
     Matrix dinputs;
@@ -491,7 +452,7 @@ class Activation_Relu{
 
     void forward(Matrix& input){
       inputs = &input;
-      
+
       // run kernel to load outputs with inputs all set to 0
       // kernel(input, outputs, input.cols*input.rows)
 
@@ -532,7 +493,7 @@ class Activation_Relu{
 
 class Softmax_CE_Loss {
 public:
-    Matrix* inputs; 
+    Matrix* inputs;
     Matrix output;
     Matrix dinputs;
     cudnnTensorDescriptor_t input_desc, output_desc;
@@ -545,7 +506,7 @@ public:
         CHECK_CUDNN(cudnnCreateTensorDescriptor(&output_desc));
 
         // Configure descriptors for column-major order
-        CHECK_CUDNN(cudnnSetTensor4dDescriptor(input_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,  batch_size, n_inputs, 1, 1)); 
+        CHECK_CUDNN(cudnnSetTensor4dDescriptor(input_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,  batch_size, n_inputs, 1, 1));
         CHECK_CUDNN(cudnnSetTensor4dDescriptor(output_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, batch_size, n_inputs, 1, 1));
 
     }
@@ -579,7 +540,7 @@ public:
         for (int i = 0; i < y_pred.rows; ++i) {
             for (int j = 0; j < y_pred.cols; ++j) {
                 y_pred_clipped(i, j) = std::min(std::max(y_pred(i, j), 1e-7f), 1.0f - 1e-7f);
-        
+
             }
         }
 
@@ -600,7 +561,7 @@ public:
 
     }
 
-    float calc_acc_cpu(const Matrix& y_pred, const Matrix& y_true) {
+    float calc_acc_cpu(const Matrix& y_pred, const Matrix& y_true, bool verbose = false) {
         float total_correct = 0;
 
         // For each sample prediction
@@ -612,6 +573,9 @@ public:
             // Compare to each class prediction in the sample
             for (int j = 0; j < y_pred.cols; ++j) {
                 if (y_pred(i, true_class_index) < y_pred(i, j)) {
+                    if (verbose){
+                      cout << "Index of sample wrongly predicted: " << i << endl;
+                    }
                     total_correct--;
                     break;
                 }
@@ -626,10 +590,6 @@ public:
     // Backward pass
     void backward(Matrix& dvalues, Matrix& y_true) {
 
-        // y_true will be array of discrete values (index of correct class) with len batch size 
-        // we will launch one thread for each sample, because each sample only has 1 element that needs to be updated
-        // the thread will index output data at global_tid * len_inputs + y_true[global_tid]
-        // and subtract 1 from this value
 
         int totalLen = dvalues.cols * dvalues.rows;  // Batch size
         int blockSize = 1024;
@@ -727,21 +687,21 @@ public:
 //     Matrix y_true(1, batch_size);
 //     y_true.init_int(1);
 
-    
+
 //     Layer_Dense layer1(batch_size, n_inputs, n_neurons);
 //     Activation_Relu act1(batch_size, n_neurons);
 //     Softmax_CE_Loss smceLoss(batch_size, n_neurons);
 //     Optimizer_Adam optimizer(0.05, 5e-7);
-    
+
 
 //     for(int epoch = 0;  epoch <100; epoch ++){
-    
+
 //     {CudaTimer("fwd bkwd");
-    
+
 //     layer1.forward(inputs);
 //     act1.forward(layer1.output);
 //     smceLoss.forward(act1.output);
-    
+
 //     smceLoss.backward(smceLoss.output, y_true);
 //     act1.backward(smceLoss.dinputs);
 //     layer1.backward(act1.dinputs);
@@ -762,9 +722,8 @@ public:
 //     // layer1.dinputs.printDims("layer1 dinp");
 
 
-    
-// }
 
+// }
 
 
 
